@@ -48,6 +48,24 @@ impl Matrix {
         self.data[(row * self.cols + col) as usize] = value;
     }
 
+    pub fn get_block(&self, start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> Matrix {
+        let mut output = Matrix::zeros(end_row - start_row, end_col - start_col);
+        for i in start_row..end_row {
+            for j in start_col..end_col {
+                output.set(i - start_row, j - start_col, self.get(i, j));
+            }
+        }
+        output
+    }
+
+    pub fn set_block(&mut self, start_row: u32, start_col: u32, block: &Matrix) {
+        for i in 0..block.rows {
+            for j in 0..block.cols {
+                self.set(i + start_row, j + start_col, block.get(i, j));
+            }
+        }
+    }
+
     pub fn get_row(&self, row: u32) -> Matrix {
         let mut output = Matrix::zeros(1, self.cols);
         for i in 0..self.cols {
@@ -149,13 +167,7 @@ impl Matrix {
     }
 
     pub fn flatten(&self) -> Vec<u32> {
-        let mut new_data = vec![0; (self.rows * self.cols) as usize];
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                new_data[(i * self.cols + j) as usize] = self.get(i, j);
-            }
-        }
-        new_data
+        self.data.clone()
     }
     
 }
