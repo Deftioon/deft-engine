@@ -69,8 +69,16 @@ impl DWindow {
 }
 
 impl DWindow {
+    pub fn draw_line(&mut self, point1: &game::Point, point2: &game::Point, color: u32) {
+        self.image.draw_line(point1, point2, color);
+    }
+
     pub fn draw_object_2d(&mut self, obj: &dyn game::GameObjectCommon) {
         self.image.draw_object_2d(obj);
+    }
+
+    pub fn draw_polygon_2d(&mut self, polygon: &game::Polygon) {
+        self.image.draw_polygon_2d(polygon);
     }
 }
 
