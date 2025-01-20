@@ -2,12 +2,16 @@ use minifb::{Key, Window, WindowOptions};
 
 pub mod game;
 pub mod image;
+pub mod physics;
 
 pub struct DWindow {
     pub window: Window,
     pub image: image::Image,
     pub width: usize,
-    pub height: usize
+    pub height: usize,
+    pub depth: usize,
+    pub objects: Vec<Box<dyn game::GameObjectCommon>>,
+    pub render_queue: Vec<Box<dyn game::GameObjectCommon>>
 }
 
 impl DWindow {
@@ -23,7 +27,10 @@ impl DWindow {
             }),
             image: image::Image::new(width, height),
             width,
-            height
+            height,
+            depth: 100,
+            objects: Vec::new(),
+            render_queue: Vec::new()
         }
     }
 
@@ -44,6 +51,13 @@ impl DWindow {
     }
 
     pub fn update(&mut self) {
+        for obj in self.objects.iter_mut() {
+            if obj.filled(){
+                self.image.draw_object_2d_filled(obj);
+            } else {
+                self.image.draw_object_2d_hollow(obj);
+            }
+        }
         self.window.update_with_buffer(&self.buffer(), self.width, self.height).unwrap();
     }
 
@@ -73,12 +87,46 @@ impl DWindow {
         self.image.draw_line(point1, point2, color);
     }
 
-    pub fn draw_object_2d(&mut self, obj: &dyn game::GameObjectCommon) {
-        self.image.draw_object_2d(obj);
+    pub fn draw_object_2d(&mut self, obj: &mut Box<dyn game::GameObjectCommon>, filled: bool) {
+        if filled {
+            self.image.draw_object_2d_filled(obj);
+        } else {
+            self.image.draw_object_2d_hollow(obj);
+        }
     }
+}
 
-    pub fn draw_polygon_2d(&mut self, polygon: &game::Polygon) {
-        self.image.draw_polygon_2d(polygon);
+impl DWindow {
+    pub fn set_velocity(&mut self, index: usize, x: f32, y: f32, z: f32) {
+        let future_x = self.objects[index].coord().0 as f32 + x;
+        let future_y = self.objects[index].coord().1 as f32 + y;
+        let future_z = self.objects[index].coord().2 as f32 + z;
+
+        let width = self.objects[index as usize].size().0 as f32;
+        let height = self.objects[index as usize].size().1 as f32;
+        let depth = self.objects[index as usize].size().2 as f32;
+
+        if future_x >= 0.0 && future_x + width <= self.width as f32 - 1.0 {
+            println!("{}, {}, {}", self.objects[index as usize].coord().0, self.objects[index as usize].coord().1, self.objects[index as usize].coord().2);
+            self.objects[index].set_velocity(x, 0.0, 0.0);
+            self.objects[index].update();
+        }
+        if future_y >= 0.0 && future_y + height <= self.height as f32 - 1.0 {
+            println!("{}, {}, {}", self.objects[index as usize].coord().0, self.objects[index as usize].coord().1, self.objects[index as usize].coord().2);
+            self.objects[index].set_velocity(0.0, y, 0.0);
+            self.objects[index].update();
+        }
+        if future_z >= 0.0 && future_z + depth <= self.depth as f32 - 1.0 {
+            println!("{}, {}, {}", self.objects[index as usize].coord().0, self.objects[index as usize].coord().1, self.objects[index as usize].coord().2);
+            self.objects[index].set_velocity(0.0, 0.0, z);
+            self.objects[index].update();
+        }
+    }
+}
+
+impl DWindow {
+    pub fn add_object(&mut self, obj: Box<dyn game::GameObjectCommon>) {
+        self.objects.push(obj);
     }
 }
 

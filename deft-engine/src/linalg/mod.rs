@@ -58,10 +58,27 @@ impl Matrix {
         output
     }
 
+    pub fn add_block(&mut self, start_row: u32, start_col: u32, block: &Matrix) {
+        for i in 0..block.rows {
+            for j in 0..block.cols {
+                self.set(i + start_row, j + start_col, self.get(i + start_row, j + start_col) + block.get(i, j));
+            }
+        }
+    }
+
     pub fn set_block(&mut self, start_row: u32, start_col: u32, block: &Matrix) {
         for i in 0..block.rows {
             for j in 0..block.cols {
                 self.set(i + start_row, j + start_col, block.get(i, j));
+            }
+        }
+    }
+    pub fn overlay_block(&mut self, start_row: u32, start_col: u32, block: &Matrix) {
+        for i in 0..block.rows {
+            for j in 0..block.cols {
+                if block.get(i, j) != 0 {
+                    self.set(i + start_row, j + start_col, block.get(i, j));
+                }
             }
         }
     }

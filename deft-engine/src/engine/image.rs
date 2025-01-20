@@ -1,4 +1,3 @@
-
 use crate::linalg;
 use crate::engine::game;
 
@@ -60,6 +59,14 @@ impl Image {
     pub fn set_block(&mut self, start_row: usize, start_col: usize, block: &Image) {
         self.pixels.set_block(start_row as u32, start_col as u32, &block.pixels);
     }
+
+    pub fn add_block(&mut self, start_row: usize, start_col: usize, block: &Image) {
+        self.pixels.add_block(start_row as u32, start_col as u32, &block.pixels);
+    }
+
+    pub fn overlay_block(&mut self, start_row: usize, start_col: usize, block: &Image) {
+        self.pixels.overlay_block(start_row as u32, start_col as u32, &block.pixels);
+    }
 }
 
 impl Image {
@@ -68,10 +75,26 @@ impl Image {
         (r << 16) | (g << 8) | b
     }
 
-    pub fn draw_object_2d(&mut self, obj: &dyn game::GameObjectCommon) {
+    pub fn draw_object_2d_filled(&mut self, obj: &mut Box<dyn game::GameObjectCommon>) {
         let (x, y, _) = obj.coord();
+        obj.generate_image();
         let image = obj.image();
-        self.set_block(y as usize, x as usize, image);
+        match obj.mode() {
+            game::DrawMode::Addition => self.add_block(y as usize, x as usize, &image),
+            game::DrawMode::Overlay => self.overlay_block(y as usize, x as usize, &image),
+            game::DrawMode::Override => self.set_block(y as usize, x as usize, &image),
+        }
+    }
+
+    pub fn draw_object_2d_hollow(&mut self, obj: &mut Box<dyn game::GameObjectCommon>) {
+        let (x, y, _) = obj.coord();
+        obj.generate_image_hollow();
+        let image = obj.image();
+        match obj.mode() {
+            game::DrawMode::Addition => self.add_block(y as usize, x as usize, &image),
+            game::DrawMode::Overlay => self.overlay_block(y as usize, x as usize, &image),
+            game::DrawMode::Override => self.set_block(y as usize, x as usize, &image),
+        }
     }
 
     pub fn draw_line(&mut self, point1: &game::Point, point2: &game::Point, color: u32) {
@@ -117,15 +140,75 @@ impl Image {
             }
         }
     }
+}
 
-    pub fn draw_polygon_2d(&mut self, polygon: &game::Polygon) {
-        let points = &polygon.points.points;
-        let color = polygon.color;
-        for i in 0..points.len()-1 {
-            let point1 = &points[i];
-            let point2 = &points[i + 1];
-            self.draw_line(point1, point2, color);
+impl Image {
+    pub fn fill_triangle(&mut self, points: Vec<&game::Point>, color: u32) {
+        if points.len() != 3 {
+            return;
         }
-        self.draw_line(&points[points.len()-1], &points[0], color);
+
+        let mut points = points.clone();
+        points.sort_by(|a, b| a.coord.1.cmp(&b.coord.1));
+
+        let (p1, p2, p3) = (points[0], points[1], points[2]);
+
+        let fill_bottom_flat_triangle = |image: &mut Image, v1: &game::Point, v2: &game::Point, v3: &game::Point, color: u32| {
+            let inv_slope1 = (v2.coord.0 as f32 - v1.coord.0 as f32) / (v2.coord.1 as f32 - v1.coord.1 as f32);
+            let inv_slope2 = (v3.coord.0 as f32 - v1.coord.0 as f32) / (v3.coord.1 as f32 - v1.coord.1 as f32);
+
+            let mut curx1 = v1.coord.0 as f32;
+            let mut curx2 = v1.coord.0 as f32;
+
+            for scanline_y in v1.coord.1..=v2.coord.1 {
+                image.draw_line(&game::Point::new(curx1 as i32, scanline_y, 0), &game::Point::new(curx2 as i32, scanline_y, 0), color);
+                curx1 += inv_slope1;
+                curx2 += inv_slope2;
+            }
+        };
+
+        let fill_top_flat_triangle = |image: &mut Image, v1: &game::Point, v2: &game::Point, v3: &game::Point, color: u32| {
+            let inv_slope1 = (v3.coord.0 as f32 - v1.coord.0 as f32) / (v3.coord.1 as f32 - v1.coord.1 as f32);
+            let inv_slope2 = (v3.coord.0 as f32 - v2.coord.0 as f32) / (v3.coord.1 as f32 - v2.coord.1 as f32);
+
+            let mut curx1 = v3.coord.0 as f32;
+            let mut curx2 = v3.coord.0 as f32;
+
+            for scanline_y in (v1.coord.1..=v3.coord.1).rev() {
+                image.draw_line(&game::Point::new(curx1 as i32, scanline_y, 0), &game::Point::new(curx2 as i32, scanline_y, 0), color);
+                curx1 -= inv_slope1;
+                curx2 -= inv_slope2;
+            }
+        };
+
+        if p2.coord.1 == p3.coord.1 {
+            fill_bottom_flat_triangle(self, p1, p2, p3, color);
+        } else if p1.coord.1 == p2.coord.1 {
+            fill_top_flat_triangle(self, p1, p2, p3, color);
+        } else {
+            let p4 = game::Point::new(
+                p1.coord.0 + ((p2.coord.1 - p1.coord.1) as f32 / (p3.coord.1 - p1.coord.1) as f32 * (p3.coord.0 - p1.coord.0) as f32) as i32,
+                p2.coord.1,
+                0,
+            );
+            fill_bottom_flat_triangle(self, p1, p2, &p4, color);
+            fill_top_flat_triangle(self, p2, &p4, p3, color);
+        }
+    }
+
+    pub fn fill_convex_polygon(&mut self, polygon: &game::Polygon, color: u32) {
+        let points = polygon.points();
+
+        // Fan Triangulation
+        let mut triangles = Vec::new();
+        for i in 1..points.len() - 1 {
+            triangles.push(vec![points[0], points[i], points[i + 1]]);
+        }
+
+        for triangle in triangles {
+            self.fill_triangle(triangle, color);
+        }
+        
     }
 }
+
